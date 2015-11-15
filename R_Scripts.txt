@@ -1,0 +1,62 @@
+# CHURN DECISION TREE
+
+ChurnData <- maml.mapInputPort(1) # class: data.frame
+library(party)
+model <- ctree(Churn_~ . ,data= ChurnData,control = ctree_control(maxdepth=3))
+plot(model, main = 'Churn Decision Tree', type = "simple")
+print(model)
+
+ChurnProb<- unlist(predict(model,ChurnData,type="prob"))
+ChurnClass<- as.numeric(ChurnProb >= 0.5)
+
+ChurnPred <- data.frame(ChurnData$Churn_, ChurnClass,ChurnProb)
+colnames(ChurnPred) <- c("Churn_","Scored Label","Scored Probability")
+# Select data.frame to be sent to the output Dataset port
+maml.mapOutputPort("ChurnPred");
+
+
+#SCATTER PLOTS
+
+ChurnData <- maml.mapInputPort(1) # class: data.frame
+library(ggplot2)
+# Scatter plot of Account_Lenght vs CustServ_Calls by churn
+ggplot(ChurnData, aes(x=Account_Length, y=CustServ_Calls, color=Int_l_Plan))+ geom_jitter()+facet_wrap(~Churn_)
+# Select data.frame to be sent to the output Dataset port
+maml.mapOutputPort("ChurnData");
+
+
+#CREATE R MODEL
+
+#Trainer R script
+# Input: dataset
+# Output: model
+# See the help page of "Create R Model" module for the list of predefined functions and constants.
+features <- get.feature.columns(dataset)
+labels   <- as.factor(get.label.column(dataset))
+train.data <- data.frame(features, labels)
+feature.names <- get.feature.column.names(dataset)
+names(train.data) <- c(feature.names, "Class")
+# Customization here
+model <- glm(Class ~ ., data=train.data, family=binomial(logit))
+
+#Scorer R script
+# Input: model, dataset
+# Output: scores
+# See the help page of "Create R Model" module for the list of predefined functions and constants.
+prob <- predict(model, dataset, type="response")
+classes <- as.factor(as.numeric(prob >= 0.5))
+scores <- data.frame(
+    'Scored_Labels'=classes, 
+    'Scored_Probabilities'=prob)
+
+
+#EXECUTE R SCRIPT FOR EVALUATE MODEL
+
+dataset1 <- maml.mapInputPort(1) # class: data.frame
+attr(dataset1$Churn_, 'label.type') = 'True Labels'
+attr(dataset1$Scored_Probabilities, 'feature.channel') = 'Binary Classification Scores'
+attr(dataset1$Scored_Probabilities, 'score.type') = 'Calibrated Score'
+attr(dataset1$Scored_Labels, 'feature.channel') = 'Binary Classification Scores'
+attr(dataset1$Scored_Labels, 'score.type') = 'Assigned Labels'
+print(str(dataset1))
+maml.mapOutputPort("dataset1")
